@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -25,15 +26,38 @@ func cleanToken() *ipv6token {
 	return t
 }
 
-func (t *ipv6token) pushHexChar(b byte) {
+func (t *ipv6token) pushHexChar(b byte) error {
 	if checkHexChar(b) {
 		copy(t[0:3], t[1:4])
 		t[3] = b
+	} else {
+		return errors.New("not a hex char")
 	}
+	return nil
+}
+
+func (t *ipv6token) fillHexChar(b byte) error {
+	if checkHexChar(b) {
+
+	} else {
+		return errors.New("not a hex char")
+	}
+	return nil
 }
 
 func (t *ipv6token) String() string {
 	return string(t[:])
+}
+
+func tokenFromString(s string) *ipv6token {
+	t := cleanToken()
+	r := []rune(s)
+	for _, v := range r {
+		if v < 256 {
+			t.pushHexChar(byte(v))
+		}
+	}
+	return t
 }
 
 func main() {
@@ -45,5 +69,8 @@ func main() {
 	// for i := 0; i < 10; i++ {
 	// 	t.pushHexChar('0' + byte(i))
 	// }
+	fmt.Println(t)
+
+	t = tokenFromString("3553869ąłś")
 	fmt.Println(t)
 }
