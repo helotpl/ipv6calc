@@ -4,18 +4,32 @@ import (
 	"fmt"
 )
 
-type quadOctet [4]string
+type ipv6token []byte
 
-func (qo *quadOctet) push(c rune) {
+func checkHexChar(b byte) bool {
+	if b >= '0' && b <= '9' {
+		return true
+	}
+	if b >= 'a' && b <= 'f' {
+		return true
+	}
+	if b >= 'A' && b <= 'F' {
+		return true
+	}
+	return false
+}
 
+func (t *ipv6token) pushHexChar(b byte) {
+	if checkHexChar(b) {
+		*t = append(*t, b)
+	}
 }
 
 func main() {
-	fmt.Println("it works!")
-	const sample = "\xbd\xb2\x3d\xbc\x20\xe2\x8c\x98"
+	t := new(ipv6token)
 
-	fmt.Println(sample)
-	for i := 0; i < len(sample); i++ {
-		fmt.Printf("%x ", sample[i])
-	}
+	t.pushHexChar('a')
+	t.pushHexChar('9')
+	t.pushHexChar('x')
+	fmt.Println(string(*t))
 }
