@@ -198,6 +198,15 @@ func hexStringToInt(b []byte) (r int64, e error) {
 	return ret, nil
 }
 
+func (i6 *ipv6addr) asHex() string {
+	ret := fmt.Sprintf("%016x%016x", i6.high, i6.low)
+	return ret
+}
+
+func retokenize(s string) string {
+	return s
+}
+
 func makeIPv6Addr(t ipv6tokenized) (i6 ipv6addr, e error) {
 	if len(t) != 8 {
 		return ipv6addr{0, 0}, errors.New("ipv6tokenized should have exactly 8 tokens")
@@ -213,6 +222,15 @@ func makeIPv6Addr(t ipv6tokenized) (i6 ipv6addr, e error) {
 	}
 
 	return ipv6addr{high, low}, nil
+}
+
+func IPv6Addr(s string) (i6 ipv6addr, e error) {
+	t, err := tokenizeIPv6(s)
+	if err != nil {
+		return ipv6addr{0, 0}, err
+	}
+	tt := makeTokens(t)
+	return makeIPv6Addr(tt)
 }
 
 func main() {
@@ -247,5 +265,8 @@ func main() {
 	i6, err := makeIPv6Addr(a)
 	if err == nil {
 		fmt.Println(i6)
+		fmt.Println(i6.asHex())
+		fmt.Printf("%+v", i6)
 	}
+
 }
