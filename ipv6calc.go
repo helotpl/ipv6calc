@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type ipv6token [4]byte
@@ -52,12 +53,36 @@ func (t *ipv6token) String() string {
 func tokenFromString(s string) *ipv6token {
 	t := cleanToken()
 	r := []rune(s)
-	for _, v := range r {
-		if v < 256 {
-			t.pushHexChar(byte(v))
+
+	curr := 3
+	//reverse iterate over runes
+	for i := len(r) - 1; i >= 0; i-- {
+		rune := r[i]
+		if rune < 256 {
+			b := byte(rune)
+			if checkHexChar(b) {
+				t[curr] = b
+				curr--
+				if curr < 0 {
+					break
+				}
+			}
 		}
 	}
 	return t
+}
+
+//ff = 8bit
+//ffff = 16bit
+//128/16 = 8 tokens
+//function accepts only bare IPv6 address
+func tokenizeIPv6(s string) []ipv6token {
+	parts := strings.Split(s, ":")
+	for _, v := range parts {
+		x := tokenFromString(v)
+		fmt.Println(x)
+	}
+	return make([]ipv6token, 0)
 }
 
 func main() {
@@ -71,6 +96,8 @@ func main() {
 	// }
 	fmt.Println(t)
 
-	t = tokenFromString("3553869ąłś")
+	t = tokenFromString("869ąłś")
 	fmt.Println(t)
+
+	tokenizeIPv6("342:356:34234:342:23434:3223")
 }
