@@ -167,21 +167,52 @@ func hexToInt(b byte) int64 {
 		return int64(b) - '0'
 	}
 	if b >= 'a' && b <= 'f' {
-		return int64(b) - 'a'
+		return int64(b) - 'a' + 10
 	}
 	if b >= 'A' && b <= 'F' {
-		return int64(b) - 'A'
+		return int64(b) - 'A' + 10
 	}
 	return 0
 }
 
-func makeIPv6Addr(t ipv6tokenized) (i6 ipv6addr, e error) {
-	if len(t) != 8 {
-		return ipv6addr{0, 0}, errors.New("ipv6tokenized should have length of 8")
+func mergeTokens(t []ipv6token) []byte {
+	ret := make([]byte, len(t)*4)
+	for i := range t {
+		copy(ret[i*4:], t[i][:])
+	}
+	return ret
+}
+
+// 1 hex == 4 bits
+// 16 hex == 64 bits
+func hexStringToInt(b []byte) (r int64, e error) {
+	if len(b) > 16 {
+		return 0, errors.New("hex string too long to fit into int64")
+	}
+	var ret int64 = 0
+
+	for _, v := range b {
+		ret = ret<<4 + hexToInt(v)
 	}
 
-	//tmp shut errors
-	return ipv6addr{0, 0}, nil
+	return ret, nil
+}
+
+func makeIPv6Addr(t ipv6tokenized) (i6 ipv6addr, e error) {
+	if len(t) != 8 {
+		return ipv6addr{0, 0}, errors.New("ipv6tokenized should have exactly 8 tokens")
+	}
+
+	high, err := hexStringToInt(mergeTokens(t[0:4]))
+	if err != nil {
+		return ipv6addr{0, 0}, err
+	}
+	low, err := hexStringToInt(mergeTokens(t[4:8]))
+	if err != nil {
+		return ipv6addr{0, 0}, err
+	}
+
+	return ipv6addr{high, low}, nil
 }
 
 func main() {
@@ -206,11 +237,15 @@ func main() {
 
 	tt, err := tokenizeIPv6("342:356:34234::3223")
 	if err == nil {
-		fmt.Println(makeTokens(tt).String())
+		fmt.Println(mergeTokens(makeTokens(tt)))
 	}
-	tt, err = tokenizeIPv6("a::")
+	tt, err = tokenizeIPv6("a::1")
 	if err == nil {
 		fmt.Println(makeTokens(tt).String())
 	}
-
+	a := makeTokens(tt)
+	i6, err := makeIPv6Addr(a)
+	if err == nil {
+		fmt.Println(i6)
+	}
 }
