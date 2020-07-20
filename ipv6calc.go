@@ -78,10 +78,7 @@ func tokenFromString(s string) *ipv6token {
 //function accepts only bare IPv6 address
 func tokenizeIPv6(s string) []ipv6token {
 	parts := strings.Split(s, ":")
-	for _, v := range parts {
-		x := tokenFromString(v)
-		fmt.Println(x)
-	}
+	
 	return make([]ipv6token, 0)
 }
 
