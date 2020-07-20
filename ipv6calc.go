@@ -10,6 +10,11 @@ type ipv6token [4]byte
 
 type ipv6tokenized []ipv6token
 
+type ipv6addr struct {
+	high int64
+	low  int64
+}
+
 func checkHexChar(b byte) bool {
 	if b >= '0' && b <= '9' {
 		return true
@@ -147,6 +152,36 @@ func zeroTokens(num int) []string {
 		ret[i] = "0"
 	}
 	return ret
+}
+
+func tokensToByteString(t []ipv6token) []byte {
+	ret := make([]byte, len(t)*4)
+	for i := range t {
+		copy(ret[i*4:], t[i][:])
+	}
+	return ret
+}
+
+func hexToInt(b byte) int64 {
+	if b >= '0' && b <= '9' {
+		return int64(b) - '0'
+	}
+	if b >= 'a' && b <= 'f' {
+		return int64(b) - 'a'
+	}
+	if b >= 'A' && b <= 'F' {
+		return int64(b) - 'A'
+	}
+	return 0
+}
+
+func makeIPv6Addr(t ipv6tokenized) (i6 ipv6addr, e error) {
+	if len(t) != 8 {
+		return ipv6addr{0, 0}, errors.New("ipv6tokenized should have length of 8")
+	}
+
+	//tmp shut errors
+	return ipv6addr{0, 0}, nil
 }
 
 func main() {
