@@ -343,8 +343,6 @@ func (i6 *ipv6addr) StringTokens(leadingZeros bool) []string {
 
 func (i6 ipv6addr) String() string {
 	s := i6.StringTokens(false)
-	fmt.Println(findZerosInTokens(s))
-	fmt.Println(findBestZeros(findZerosInTokens(s)))
 	s = removeZeroTokens(s)
 	return strings.Join(s, ":")
 }
@@ -417,14 +415,24 @@ func main() {
 		"FFFF:ffff:ffff::",
 		"::"}
 	for _, x := range tests {
+		fmt.Print("Input: ")
 		fmt.Println(x)
 		i6, err := makeIPv6AddrFromString(x)
 		if err != nil {
 			fmt.Println(err)
 		} else {
+			s := i6.StringTokens(false)
+			fmt.Print("Println(findZerosInTokens(s)): ")
+			fmt.Println(findZerosInTokens(s))
+			fmt.Print("Println(findBestZeros(findZerosInTokens(s))): ")
+			fmt.Println(findBestZeros(findZerosInTokens(s)))
+			fmt.Print("Println(i6): ")
 			fmt.Println(i6)
+			fmt.Print("Println(i6.asHex()): ")
 			fmt.Println(i6.asHex())
+			fmt.Print("Println(i6.asBigInt()): ")
 			fmt.Println(i6.asBigInt())
+			fmt.Print("Println(i6.LongString()): ")
 			fmt.Println(i6.LongString())
 		}
 	}
