@@ -204,7 +204,51 @@ func (i6 *ipv6addr) asHex() string {
 }
 
 func retokenize(s string) string {
-	return s
+	r := []rune(s)
+	l := len(r)
+	start := l % 4
+	o := make([]rune, l+(l-start)/4)
+
+	offset := 0
+	if start > 0 {
+		copy(o[:start], r[:start])
+		o[start] = ':'
+		offset++
+	}
+	for i := start; i < l; i += 4 {
+		copy(o[i+offset:i+offset+4], r[i:i+4])
+		if i+4 < l {
+			o[i+offset+4] = ':'
+			offset++
+		}
+	}
+
+	return string(o)
+}
+
+func toHexToken(num int64, token int, leadingZeros bool) string {
+	num = (num >> (token * 16)) & 0xFFFF
+	if leadingZeros {
+		return fmt.Sprintf("%04x", num)
+	} else {
+		return fmt.Sprintf("%x", num)
+	}
+}
+
+func (i6 *ipv6addr) asHexToken(token int, leadingZeros bool) string {
+	if token > 3 {
+		return toHexToken(i6.high, token-4, leadingZeros)
+	} else {
+		return toHexToken(i6.low, token, leadingZeros)
+	}
+}
+
+func (i6 *ipv6addr) String() string {
+	s := make([]string, 8)
+	for i := range s {
+		s[i] = i6.asHexToken(i, false)
+	}
+	return strings.Join(s, ":")
 }
 
 func makeIPv6Addr(t ipv6tokenized) (i6 ipv6addr, e error) {
@@ -266,7 +310,9 @@ func main() {
 	if err == nil {
 		fmt.Println(i6)
 		fmt.Println(i6.asHex())
-		fmt.Printf("%+v", i6)
+		fmt.Printf("%+v\n", i6)
+		fmt.Println(retokenize(i6.asHex()))
+		fmt.Println(i6.String())
 	}
 
 }
