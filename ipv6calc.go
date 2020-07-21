@@ -12,8 +12,8 @@ type ipv6token [4]byte
 type ipv6tokenized []ipv6token
 
 type ipv6addr struct {
-	high int64
-	low  int64
+	high uint64
+	low  uint64
 }
 
 func checkHexChar(b byte) bool {
@@ -172,15 +172,15 @@ func tokensToByteString(t []ipv6token) []byte {
 	return ret
 }
 
-func hexToInt(b byte) int64 {
+func hexToInt(b byte) uint64 {
 	if b >= '0' && b <= '9' {
-		return int64(b) - '0'
+		return uint64(b) - '0'
 	}
 	if b >= 'a' && b <= 'f' {
-		return int64(b) - 'a' + 10
+		return uint64(b) - 'a' + 10
 	}
 	if b >= 'A' && b <= 'F' {
-		return int64(b) - 'A' + 10
+		return uint64(b) - 'A' + 10
 	}
 	return 0
 }
@@ -195,11 +195,11 @@ func mergeTokens(t []ipv6token) []byte {
 
 // 1 hex == 4 bits
 // 16 hex == 64 bits
-func hexStringToInt(b []byte) (r int64, e error) {
+func hexStringToInt(b []byte) (r uint64, e error) {
 	if len(b) > 16 {
 		return 0, errors.New("hex string too long to fit into int64")
 	}
-	var ret int64 = 0
+	var ret uint64 = 0
 
 	for _, v := range b {
 		ret = ret<<4 + hexToInt(v)
@@ -236,7 +236,7 @@ func retokenize(s string) string {
 	return string(o)
 }
 
-func toHexToken(num int64, token int, leadingZeros bool) string {
+func toHexToken(num uint64, token int, leadingZeros bool) string {
 	num = (num >> (token * 16)) & 0xFFFF
 	if leadingZeros {
 		return fmt.Sprintf("%04x", num)
@@ -255,8 +255,8 @@ func (i6 *ipv6addr) asHexToken(token int, leadingZeros bool) string {
 func (i6 *ipv6addr) asBigInt() *big.Int {
 	var h, l, ret big.Int
 
-	h.SetInt64(i6.high)
-	l.SetInt64(i6.low)
+	h.SetUint64(i6.high)
+	l.SetUint64(i6.low)
 
 	ret.Lsh(&h, 64)
 	ret.Add(&ret, &l)
@@ -264,17 +264,17 @@ func (i6 *ipv6addr) asBigInt() *big.Int {
 }
 
 type zeros struct {
-	start int
-	stop  int
+	start uint
+	stop  uint
 }
 
-func (z *zeros) count() int {
+func (z *zeros) count() uint {
 	return z.stop - z.start
 }
 
 func findBestZeros(zz []zeros) zeros {
 	best := -1
-	bestLen := 0
+	bestLen := uint(0)
 	for i, z := range zz {
 		currLen := z.count()
 		if currLen > bestLen {
@@ -291,24 +291,24 @@ func findBestZeros(zz []zeros) zeros {
 func findZerosInTokens(s []string) []zeros {
 	ret := make([]zeros, 0, 10)
 	inside := false
-	start := 0
-	maxi := 0
+	start := uint(0)
+	maxi := uint(0)
 	for i := range s {
-		maxi = i
+		maxi = uint(i)
 		if s[i] == "0" {
 			if !inside {
 				inside = true
-				start = i
+				start = uint(i)
 			}
 		} else {
 			if inside {
 				inside = false
-				ret = append(ret, zeros{start, i})
+				ret = append(ret, zeros{start, uint(i)})
 			}
 		}
 	}
 	if inside && start != maxi {
-		ret = append(ret, zeros{start, maxi})
+		ret = append(ret, zeros{start, maxi + 1})
 	}
 	return ret
 }
@@ -318,6 +318,14 @@ func removeZeroTokens(s []string) []string {
 	if z.start == 0 && z.stop == 0 {
 		return s
 	}
+	if z.start == 0 {
+		z.start = 1
+		s[0] = ""
+	}
+	if z.stop == 8 {
+		z.stop = 7
+		s[7] = ""
+	}
 	newLen := 8 - z.count() + 1
 	newS := make([]string, newLen)
 	copy(newS[:z.start], s[:z.start])
@@ -325,14 +333,24 @@ func removeZeroTokens(s []string) []string {
 	return newS
 }
 
-func (i6 ipv6addr) String() string {
+func (i6 *ipv6addr) StringTokens(leadingZeros bool) []string {
 	s := make([]string, 8)
 	for i := range s {
-		s[i] = i6.asHexToken(7-i, false)
+		s[i] = i6.asHexToken(7-i, leadingZeros)
 	}
+	return s
+}
+
+func (i6 ipv6addr) String() string {
+	s := i6.StringTokens(false)
 	fmt.Println(findZerosInTokens(s))
 	fmt.Println(findBestZeros(findZerosInTokens(s)))
 	s = removeZeroTokens(s)
+	return strings.Join(s, ":")
+}
+
+func (i6 *ipv6addr) LongString() string {
+	s := i6.StringTokens(true)
 	return strings.Join(s, ":")
 }
 
@@ -363,6 +381,13 @@ func makeIPv6AddrFromString(s string) (i6 ipv6addr, e error) {
 	return makeIPv6Addr(tt)
 }
 
+func makeIPv6AddrFromMask(mask uint) (i6 ipv6addr, e error) {
+	if mask > 128 || mask < 0 {
+		return ipv6addr{}, errors.New("incorrect mask")
+	}
+	return ipv6addr{}, nil
+}
+
 func main() {
 	t := cleanToken()
 
@@ -388,7 +413,9 @@ func main() {
 		"0:a::f",
 		"23:33:ffff::0:",
 		"aa::1:0:0:0:1",
-		"a:a:a:a:a:a:a:a"}
+		"a:a:a:a:a:a:a:a",
+		"FFFF:ffff:ffff::",
+		"::"}
 	for _, x := range tests {
 		fmt.Println(x)
 		i6, err := makeIPv6AddrFromString(x)
@@ -398,6 +425,7 @@ func main() {
 			fmt.Println(i6)
 			fmt.Println(i6.asHex())
 			fmt.Println(i6.asBigInt())
+			fmt.Println(i6.LongString())
 		}
 	}
 
