@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 )
 
@@ -134,14 +135,23 @@ func makeTokens(s []string) ipv6tokenized {
 
 func findEmptyToken(ss []string) (num int, e error) {
 	empty := -1
-	for i := 1; i < len(ss)-1; i++ {
+	maxssind := len(ss)
+	for i := 1; i < maxssind-1; i++ {
 		if len(ss[i]) == 0 {
 			if empty < 0 {
 				empty = i
 			} else {
-				return -1, errors.New("double empty tokens")
+				return -1, errors.New("illegal double empty tokens")
 			}
 		}
+	}
+	//this check is unnessesary, because these situations are NOT AMBIGOUS
+	//but designers of IPv6 addressing apparently know better
+	if len(ss[0]) == 0 && empty != 1 {
+		return -1, errors.New("illegal empty token at the start")
+	}
+	if len(ss[maxssind-1]) == 0 && empty != maxssind-2 {
+		return -1, errors.New("illegal empty token at the end")
 	}
 	return empty, nil
 }
@@ -230,24 +240,99 @@ func toHexToken(num int64, token int, leadingZeros bool) string {
 	num = (num >> (token * 16)) & 0xFFFF
 	if leadingZeros {
 		return fmt.Sprintf("%04x", num)
-	} else {
-		return fmt.Sprintf("%x", num)
 	}
+	return fmt.Sprintf("%x", num)
 }
 
 func (i6 *ipv6addr) asHexToken(token int, leadingZeros bool) string {
 	if token > 3 {
 		return toHexToken(i6.high, token-4, leadingZeros)
-	} else {
-		return toHexToken(i6.low, token, leadingZeros)
 	}
+	return toHexToken(i6.low, token, leadingZeros)
+
 }
 
-func (i6 *ipv6addr) String() string {
+func (i6 *ipv6addr) asBigInt() *big.Int {
+	var h, l, ret big.Int
+
+	h.SetInt64(i6.high)
+	l.SetInt64(i6.low)
+
+	ret.Lsh(&h, 64)
+	ret.Add(&ret, &l)
+	return &ret
+}
+
+type zeros struct {
+	start int
+	stop  int
+}
+
+func (z *zeros) count() int {
+	return z.stop - z.start
+}
+
+func findBestZeros(zz []zeros) zeros {
+	best := -1
+	bestLen := 0
+	for i, z := range zz {
+		currLen := z.count()
+		if currLen > bestLen {
+			best = i
+			bestLen = currLen
+		}
+	}
+	if best > -1 {
+		return zz[best]
+	}
+	return zeros{0, 0}
+}
+
+func findZerosInTokens(s []string) []zeros {
+	ret := make([]zeros, 0, 10)
+	inside := false
+	start := 0
+	maxi := 0
+	for i := range s {
+		maxi = i
+		if s[i] == "0" {
+			if !inside {
+				inside = true
+				start = i
+			}
+		} else {
+			if inside {
+				inside = false
+				ret = append(ret, zeros{start, i})
+			}
+		}
+	}
+	if inside && start != maxi {
+		ret = append(ret, zeros{start, maxi})
+	}
+	return ret
+}
+
+func removeZeroTokens(s []string) []string {
+	z := findBestZeros(findZerosInTokens(s))
+	if z.start == 0 && z.stop == 0 {
+		return s
+	}
+	newLen := 8 - z.count() + 1
+	newS := make([]string, newLen)
+	copy(newS[:z.start], s[:z.start])
+	copy(newS[z.start+1:], s[z.stop:])
+	return newS
+}
+
+func (i6 ipv6addr) String() string {
 	s := make([]string, 8)
 	for i := range s {
-		s[i] = i6.asHexToken(i, false)
+		s[i] = i6.asHexToken(7-i, false)
 	}
+	fmt.Println(findZerosInTokens(s))
+	fmt.Println(findBestZeros(findZerosInTokens(s)))
+	s = removeZeroTokens(s)
 	return strings.Join(s, ":")
 }
 
@@ -268,7 +353,8 @@ func makeIPv6Addr(t ipv6tokenized) (i6 ipv6addr, e error) {
 	return ipv6addr{high, low}, nil
 }
 
-func IPv6Addr(s string) (i6 ipv6addr, e error) {
+//IPv6Addr ...
+func makeIPv6AddrFromString(s string) (i6 ipv6addr, e error) {
 	t, err := tokenizeIPv6(s)
 	if err != nil {
 		return ipv6addr{0, 0}, err
@@ -297,22 +383,22 @@ func main() {
 	fmt.Println(tokenizeIPv6("342:356:34234:::23434:3223"))
 	fmt.Println(tokenizeIPv6("342:356:34234::aaa:a:23434:3223"))
 
-	tt, err := tokenizeIPv6("342:356:34234::3223")
-	if err == nil {
-		fmt.Println(mergeTokens(makeTokens(tt)))
-	}
-	tt, err = tokenizeIPv6("a::1")
-	if err == nil {
-		fmt.Println(makeTokens(tt).String())
-	}
-	a := makeTokens(tt)
-	i6, err := makeIPv6Addr(a)
-	if err == nil {
-		fmt.Println(i6)
-		fmt.Println(i6.asHex())
-		fmt.Printf("%+v\n", i6)
-		fmt.Println(retokenize(i6.asHex()))
-		fmt.Println(i6.String())
+	tests := []string{"342:356:34234::3223",
+		"0:a::",
+		"0:a::f",
+		"23:33:ffff::0:",
+		"aa::1:0:0:0:1",
+		"a:a:a:a:a:a:a:a"}
+	for _, x := range tests {
+		fmt.Println(x)
+		i6, err := makeIPv6AddrFromString(x)
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Println(i6)
+			fmt.Println(i6.asHex())
+			fmt.Println(i6.asBigInt())
+		}
 	}
 
 }
