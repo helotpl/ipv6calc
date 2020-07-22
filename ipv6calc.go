@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 )
 
@@ -14,6 +15,11 @@ type ipv6tokenized []ipv6token
 type ipv6addr struct {
 	high uint64
 	low  uint64
+}
+
+type ipv6prefix struct {
+	addr ipv6addr
+	mask uint
 }
 
 func checkHexChar(b byte) bool {
@@ -270,8 +276,8 @@ func (i6 *ipv6addr) And(i *ipv6addr) *ipv6addr {
 }
 
 func (i6 *ipv6addr) Or(i *ipv6addr) *ipv6addr {
-	nh := i6.high & i.high
-	nl := i6.low & i.low
+	nh := i6.high | i.high
+	nl := i6.low | i.low
 	return &ipv6addr{nh, nl}
 }
 
@@ -397,6 +403,59 @@ func makeIPv6AddrFromString(s string) (i6 ipv6addr, e error) {
 	return makeIPv6Addr(tt)
 }
 
+func makeIPv6AddrFromString2(s string) (i6 *ipv6addr, e error) {
+	ss := strings.Split(s, ":")
+	if len(ss) > 8 {
+		return nil, errors.New("too many colons in address")
+	}
+	empty := false
+	for _, v := range ss {
+		if len(v) == 0 {
+			if empty {
+				return nil, errors.New("detected more than one double colon")
+			}
+			empty = true
+		}
+	}
+	if empty == false && len(ss) != 8 {
+		return nil, errors.New("too short address when there is no double colon")
+	}
+	addr := ipv6addr{0, 0}
+	for i := 0; i < len(ss); i++ {
+		if ss[i] == "" {
+			break
+		}
+		a, err := strconv.ParseUint(ss[i], 16, 16)
+		if err != nil {
+			return nil, err
+		}
+		if i < 4 {
+			addr.high = addr.high + (a << (16 * (3 - i)))
+		} else {
+			addr.low = addr.low + (a << (16 * (7 - i)))
+		}
+	}
+	//there is an doublecolon (empty token) we have to walk address in reverse order
+	if empty {
+		for i := 0; i < len(ss); i++ {
+			ssind := len(ss) - i - 1
+			if ss[ssind] == "" {
+				break
+			}
+			a, err := strconv.ParseUint(ss[ssind], 16, 16)
+			if err != nil {
+				return nil, err
+			}
+			if i > 3 {
+				addr.high = addr.high + (a << (16 * (i - 4)))
+			} else {
+				addr.low = addr.low + (a << (16 * i))
+			}
+		}
+	}
+	return &addr, nil
+}
+
 func makeIPv6AddrFromMask(mask uint) (i6 ipv6addr, e error) {
 	if mask > 128 || mask < 0 {
 		return ipv6addr{}, errors.New("incorrect mask")
@@ -416,6 +475,28 @@ func makeIPv6AddrFromMask(mask uint) (i6 ipv6addr, e error) {
 		l = 0xFFFFFFFFFFFFFFFF << (128 - mask)
 	}
 	return ipv6addr{h, l}, nil
+}
+
+func makeIPv6PrefixFromString(s string) (prefix *ipv6prefix, e error) {
+	ss := strings.Split(s, "/")
+	if len(ss) > 2 {
+		return nil, errors.New("too many / in prefix")
+	}
+	var mask uint64
+	if len(ss) == 2 {
+		mask, e = strconv.ParseUint(ss[1], 10, 32)
+		if e != nil {
+			return nil, e
+		}
+
+	} else {
+		mask = 128
+	}
+	i6, err := makeIPv6AddrFromString(ss[0])
+	if err != nil {
+		return nil, err
+	}
+	return &ipv6prefix{i6, uint(mask)}, nil
 }
 
 func main() {
@@ -438,7 +519,7 @@ func main() {
 	fmt.Println(tokenizeIPv6("342:356:34234:::23434:3223"))
 	fmt.Println(tokenizeIPv6("342:356:34234::aaa:a:23434:3223"))
 
-	tests := []string{"342:356:34234::3223",
+	tests := []string{"342:356:4234::3223",
 		"0:a::",
 		"0:a::f",
 		"23:33:ffff::0:",
@@ -451,7 +532,7 @@ func main() {
 	for _, x := range tests {
 		fmt.Print("Input: ")
 		fmt.Println(x)
-		i6, err := makeIPv6AddrFromString(x)
+		i6, err := makeIPv6AddrFromString2(x)
 		if err != nil {
 			fmt.Println(err)
 		} else {
@@ -470,8 +551,10 @@ func main() {
 			fmt.Println(i6.LongString())
 			for _, mask := range testmasks {
 				m, _ := makeIPv6AddrFromMask(mask)
-				fmt.Printf("Anding with mask %v : ", mask)
+				fmt.Printf("ANDing with mask %v : ", mask)
 				fmt.Println(*(i6.And(&m)))
+				fmt.Print("ORing with negmask: ")
+				fmt.Println(*(i6.Or((&m).Neg())))
 			}
 		}
 	}
