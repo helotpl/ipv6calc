@@ -263,6 +263,22 @@ func (i6 *ipv6addr) asBigInt() *big.Int {
 	return &ret
 }
 
+func (i6 *ipv6addr) And(i *ipv6addr) *ipv6addr {
+	nh := i6.high & i.high
+	nl := i6.low & i.low
+	return &ipv6addr{nh, nl}
+}
+
+func (i6 *ipv6addr) Or(i *ipv6addr) *ipv6addr {
+	nh := i6.high & i.high
+	nl := i6.low & i.low
+	return &ipv6addr{nh, nl}
+}
+
+func (i6 *ipv6addr) Neg() *ipv6addr {
+	return &ipv6addr{^i6.high, ^i6.low}
+}
+
 type zeros struct {
 	start uint
 	stop  uint
@@ -303,7 +319,9 @@ func findZerosInTokens(s []string) []zeros {
 		} else {
 			if inside {
 				inside = false
-				ret = append(ret, zeros{start, uint(i)})
+				if start+1 < uint(i) {
+					ret = append(ret, zeros{start, uint(i)})
+				}
 			}
 		}
 	}
@@ -383,7 +401,21 @@ func makeIPv6AddrFromMask(mask uint) (i6 ipv6addr, e error) {
 	if mask > 128 || mask < 0 {
 		return ipv6addr{}, errors.New("incorrect mask")
 	}
-	return ipv6addr{}, nil
+	//high
+	var h uint64
+	if mask <= 64 {
+		h = 0xFFFFFFFFFFFFFFFF
+	} else {
+		h = 0xFFFFFFFFFFFFFFFF << (mask - 64)
+	}
+	//low
+	var l uint64
+	if mask >= 64 {
+		l = 0
+	} else {
+		l = 0xFFFFFFFFFFFFFFFF << mask
+	}
+	return ipv6addr{h, l}, nil
 }
 
 func main() {
@@ -412,6 +444,7 @@ func main() {
 		"23:33:ffff::0:",
 		"aa::1:0:0:0:1",
 		"a:a:a:a:a:a:a:a",
+		"a:0:a:0:a:0:a:0",
 		"FFFF:ffff:ffff::",
 		"::"}
 	for _, x := range tests {
@@ -436,5 +469,15 @@ func main() {
 			fmt.Println(i6.LongString())
 		}
 	}
-
+	for i := 0; i <= 128; i += 4 {
+		fmt.Printf("mask %v: ", i)
+		m, err := makeIPv6AddrFromMask(uint(i))
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Print(m)
+			fmt.Print(" neg: ")
+			fmt.Println(*(m.Neg()))
+		}
+	}
 }
