@@ -145,7 +145,7 @@ func findEmptyToken(ss []string) (num int, e error) {
 			}
 		}
 	}
-	//this check is unnessesary, because these situations are NOT AMBIGOUS
+	//this checks are unnessesary, because these situations are NOT AMBIGOUS
 	//but designers of IPv6 addressing apparently know better
 	if len(ss[0]) == 0 && empty != 1 {
 		return -1, errors.New("illegal empty token at the start")
