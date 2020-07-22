@@ -403,17 +403,17 @@ func makeIPv6AddrFromMask(mask uint) (i6 ipv6addr, e error) {
 	}
 	//high
 	var h uint64
-	if mask <= 64 {
+	if mask >= 64 {
 		h = 0xFFFFFFFFFFFFFFFF
 	} else {
-		h = 0xFFFFFFFFFFFFFFFF << (mask - 64)
+		h = 0xFFFFFFFFFFFFFFFF << (64 - mask)
 	}
 	//low
 	var l uint64
-	if mask >= 64 {
+	if mask <= 64 {
 		l = 0
 	} else {
-		l = 0xFFFFFFFFFFFFFFFF << mask
+		l = 0xFFFFFFFFFFFFFFFF << (128 - mask)
 	}
 	return ipv6addr{h, l}, nil
 }
@@ -447,6 +447,7 @@ func main() {
 		"a:0:a:0:a:0:a:0",
 		"FFFF:ffff:ffff::",
 		"::"}
+	testmasks := []uint{1, 5, 64, 100, 126}
 	for _, x := range tests {
 		fmt.Print("Input: ")
 		fmt.Println(x)
@@ -467,6 +468,11 @@ func main() {
 			fmt.Println(i6.asBigInt())
 			fmt.Print("Println(i6.LongString()): ")
 			fmt.Println(i6.LongString())
+			for _, mask := range testmasks {
+				m, _ := makeIPv6AddrFromMask(mask)
+				fmt.Printf("Anding with mask %v : ", mask)
+				fmt.Println(*(i6.And(&m)))
+			}
 		}
 	}
 	for i := 0; i <= 128; i += 4 {
