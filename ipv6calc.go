@@ -18,8 +18,9 @@ type ipv6addr struct {
 }
 
 type ipv6prefix struct {
-	addr ipv6addr
-	mask uint
+	addr     ipv6addr
+	mask     uint
+	addrMask *ipv6addr
 }
 
 func checkHexChar(b byte) bool {
@@ -409,6 +410,12 @@ func makeIPv6AddrFromString2(s string) (i6 *ipv6addr, e error) {
 		return nil, errors.New("too many colons in address")
 	}
 	empty := false
+	if ss[0] == "" {
+		ss[0] = "0"
+	}
+	if ss[len(ss)-1] == "" {
+		ss[len(ss)-1] = "0"
+	}
 	for _, v := range ss {
 		if len(v) == 0 {
 			if empty {
@@ -488,15 +495,40 @@ func makeIPv6PrefixFromString(s string) (prefix *ipv6prefix, e error) {
 		if e != nil {
 			return nil, e
 		}
+		if mask > 128 {
+			return nil, errors.New("mask is too long")
+		}
 
 	} else {
 		mask = 128
 	}
-	i6, err := makeIPv6AddrFromString(ss[0])
+	i6, err := makeIPv6AddrFromString2(ss[0])
 	if err != nil {
 		return nil, err
 	}
-	return &ipv6prefix{i6, uint(mask)}, nil
+	return &ipv6prefix{*i6, uint(mask), nil}, nil
+}
+
+func (p *ipv6prefix) getAddrMask() *ipv6addr {
+	if p.addrMask == nil {
+		am, err := makeIPv6AddrFromMask(p.mask)
+		if err == nil {
+			p.addrMask = &am
+		}
+	}
+	return p.addrMask
+}
+
+func (p *ipv6prefix) firstAddressFromSubnet() *ipv6addr {
+	return p.addr.And(p.getAddrMask())
+}
+
+func (p *ipv6prefix) lastAddressFromSubnet() *ipv6addr {
+	return p.addr.Or(p.getAddrMask().Neg())
+}
+
+func (p *ipv6prefix) String() string {
+	return fmt.Sprintf("%v/%v", p.addr, p.mask)
 }
 
 func main() {
@@ -567,6 +599,29 @@ func main() {
 			fmt.Print(m)
 			fmt.Print(" neg: ")
 			fmt.Println(*(m.Neg()))
+		}
+	}
+	tests2 := []string{"342:356:4234::3223/120",
+		"0:a::/40",
+		"0:a::f/32",
+		"23:33:ffff::0:/48",
+		"aa::1:0:0:0:1",
+		"a:a:a:a:a:a:a:a/0",
+		"a:0:a:0:a:0:a:0/13",
+		"FFFF:ffff:ffff::/30",
+		"::/2"}
+	for _, x := range tests2 {
+		fmt.Print("Input: ")
+		fmt.Println(x)
+		p, err := makeIPv6PrefixFromString(x)
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Println(p)
+			fmt.Print("First: ")
+			fmt.Println(p.firstAddressFromSubnet())
+			fmt.Print("Last:  ")
+			fmt.Println(p.lastAddressFromSubnet())
 		}
 	}
 }
