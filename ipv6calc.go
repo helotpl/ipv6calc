@@ -286,6 +286,41 @@ func (i6 *ipv6addr) Neg() *ipv6addr {
 	return &ipv6addr{^i6.high, ^i6.low}
 }
 
+func (i6 *ipv6addr) Inc() *ipv6addr {
+	nl := i6.low + 1
+	//check carry
+	if i6.low > nl {
+		//carry to high
+		nh := i6.high + 1
+		//check carry
+		if i6.high > nh {
+			//carry with high
+			return nil
+		} else {
+			return &ipv6addr{nh, nl}
+		}
+	} else {
+		return &ipv6addr{i6.high, nl}
+	}
+}
+
+func (i6 *ipv6addr) Dec() *ipv6addr {
+	nl := i6.low - 1
+	if i6.low < nl {
+		//carry, borrow from high
+		nh := i6.high - 1
+		//check carry
+		if i6.high < nh {
+			//carry on hight
+			return nil
+		} else {
+			return &ipv6addr{nh, nl}
+		}
+	} else {
+		return &ipv6addr{i6.high, nl}
+	}
+}
+
 type zeros struct {
 	start uint
 	stop  uint
@@ -527,8 +562,34 @@ func (p *ipv6prefix) lastAddressFromSubnet() *ipv6addr {
 	return p.addr.Or(p.getAddrMask().Neg())
 }
 
+func (p *ipv6prefix) nextPrefix() *ipv6prefix {
+	nextaddr := p.lastAddressFromSubnet().Inc()
+	if nextaddr == nil {
+		return nil
+	}
+	return &ipv6prefix{*nextaddr, p.mask, nil}
+}
+
+func (p *ipv6prefix) makeSubnetAddress() *ipv6prefix {
+	p.addr = *p.firstAddressFromSubnet()
+	return p
+}
+
+func (p *ipv6prefix) prevPrefix() *ipv6prefix {
+	prevaddr := p.firstAddressFromSubnet().Dec()
+	if prevaddr == nil {
+		return nil
+	}
+	newprefix := ipv6prefix{*prevaddr, p.mask, nil}
+	return newprefix.makeSubnetAddress()
+}
+
 func (p *ipv6prefix) String() string {
 	return fmt.Sprintf("%v/%v", p.addr, p.mask)
+}
+
+func (p *ipv6prefix) SubnetString() string {
+	return fmt.Sprintf("%v/%v", p.firstAddressFromSubnet(), p.mask)
 }
 
 func main() {
@@ -622,6 +683,21 @@ func main() {
 			fmt.Println(p.firstAddressFromSubnet())
 			fmt.Print("Last:  ")
 			fmt.Println(p.lastAddressFromSubnet())
+			pp := p.prevPrefix()
+			if pp != nil {
+				fmt.Print("Prev:  ")
+				fmt.Println(pp)
+			} else {
+				fmt.Println("No prev.")
+			}
+
+			np := p.nextPrefix()
+			if np != nil {
+				fmt.Print("Next:  ")
+				fmt.Println(np)
+			} else {
+				fmt.Println("No next.")
+			}
 		}
 	}
 }
