@@ -670,7 +670,7 @@ func main() {
 		"a:a:a:a:a:a:a:a/0",
 		"a:0:a:0:a:0:a:0/13",
 		"FFFF:ffff:ffff::/30",
-		"::/2"}
+		"::/39"}
 	for _, x := range tests2 {
 		fmt.Print("Input: ")
 		fmt.Println(x)
