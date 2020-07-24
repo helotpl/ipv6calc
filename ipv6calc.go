@@ -266,9 +266,9 @@ func toHexTokenExpose(num uint64, token int, localExp exposeInToken) string {
 	minZeros := localExp.minZerosFromExpose()
 	var format string
 	if minZeros > 0 {
-		format = fmt.Sprintf("%%0%vv", minZeros)
+		format = fmt.Sprintf("%%0%vx", minZeros)
 	} else {
-		format = "%v"
+		format = "%x"
 	}
 	ret := fmt.Sprintf(format, num)
 	//add := uint(0)
