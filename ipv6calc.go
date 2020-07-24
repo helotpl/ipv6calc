@@ -23,6 +23,9 @@ type ipv6prefix struct {
 	addrMask *ipv6addr
 }
 
+const leftExposeChar = "<"
+const rightExposeChar = ">"
+
 func checkHexChar(b byte) bool {
 	if b >= '0' && b <= '9' {
 		return true
@@ -277,7 +280,7 @@ func toHexTokenExpose(num uint64, token int, localExp exposeInToken) string {
 			space := localExp.start
 			//if !(token == 0 && space == 0) {
 			space += uint(len(ret)) - 4
-			ret = ret[:space] + "<" + ret[space:]
+			ret = ret[:space] + leftExposeChar + ret[space:]
 			//add++
 			//}
 		}
@@ -285,7 +288,7 @@ func toHexTokenExpose(num uint64, token int, localExp exposeInToken) string {
 			space := localExp.stop
 			//if !(token == 7 && space == 4) {
 			space += uint(len(ret)) - 4 + 1
-			ret = ret[:space] + ">" + ret[space:]
+			ret = ret[:space] + rightExposeChar + ret[space:]
 			//}
 		}
 	}
@@ -552,6 +555,14 @@ func tokenizeExpose(exposeHexStart, exposeHexEnd uint) []exposeInToken {
 				s[i].contRight = false
 				s[i].stop = exposeHexEnd
 			}
+		}
+	}
+	if leftExposeChar == rightExposeChar {
+		if s[0].empty == false && s[0].start == 0 {
+			s[0].contLeft = true
+		}
+		if s[7].empty == false && s[7].stop == 3 {
+			s[7].contRight = true
 		}
 	}
 	return s
