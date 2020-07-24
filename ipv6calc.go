@@ -251,12 +251,68 @@ func toHexToken(num uint64, token int, leadingZeros bool) string {
 	return fmt.Sprintf("%x", num)
 }
 
+func (e *exposeInToken) minZerosFromExpose() uint {
+	if e.empty {
+		return 0
+	}
+	if e.contLeft {
+		return 4
+	}
+	return 4 - e.start
+}
+
+func toHexTokenExpose(num uint64, token int, localExp exposeInToken) string {
+	num = (num >> (token * 16)) & 0xFFFF
+	minZeros := localExp.minZerosFromExpose()
+	var format string
+	if minZeros > 0 {
+		format = fmt.Sprintf("%%0%vv", minZeros)
+	} else {
+		format = "%v"
+	}
+	ret := fmt.Sprintf(format, num)
+	//add := uint(0)
+	if !localExp.empty {
+		if !localExp.contLeft {
+			space := localExp.start
+			//if !(token == 0 && space == 0) {
+			space += uint(len(ret)) - 4
+			ret = ret[:space] + "<" + ret[space:]
+			//add++
+			//}
+		}
+		if !localExp.contRight {
+			space := localExp.stop
+			//if !(token == 7 && space == 4) {
+			space += uint(len(ret)) - 4 + 1
+			ret = ret[:space] + ">" + ret[space:]
+			//}
+		}
+	}
+	return ret
+}
+
 func (i6 *ipv6addr) asHexToken(token int, leadingZeros bool) string {
 	if token > 3 {
 		return toHexToken(i6.high, token-4, leadingZeros)
 	}
 	return toHexToken(i6.low, token, leadingZeros)
+}
 
+func (e exposeInToken) localExpose(token int) *exposeInToken {
+	if e.empty {
+		return &e
+	}
+	e.start -= uint(token) * 4
+	e.stop -= uint(token) * 4
+	return &e
+}
+
+func (i6 *ipv6addr) asHexTokenExpose(token int, e exposeInToken) string {
+	if token > 3 {
+		return toHexTokenExpose(i6.high, token-4, e)
+	}
+	return toHexTokenExpose(i6.low, token, e)
 }
 
 func (i6 *ipv6addr) asBigInt() *big.Int {
@@ -326,6 +382,32 @@ type zeros struct {
 	stop  uint
 }
 
+type exposeInToken struct {
+	empty     bool
+	start     uint
+	contLeft  bool
+	stop      uint
+	contRight bool
+}
+
+func (e exposeInToken) String() string {
+	if e.empty {
+		return "empty"
+	}
+	var l, r string
+	if e.contLeft {
+		l = "<-"
+	} else {
+		l = strconv.FormatUint(uint64(e.start), 10)
+	}
+	if e.contRight {
+		r = "->"
+	} else {
+		r = strconv.FormatUint(uint64(e.stop), 10)
+	}
+	return strings.Join([]string{l, r}, ";")
+}
+
 func (z *zeros) count() uint {
 	return z.stop - z.start
 }
@@ -373,8 +455,55 @@ func findZerosInTokens(s []string) []zeros {
 	return ret
 }
 
+func findZerosInTokensExpose(s []string, exposeTokens []exposeInToken) []zeros {
+	ret := make([]zeros, 0, 10)
+	inside := false
+	start := uint(0)
+	maxi := uint(0)
+	for i := range s {
+		maxi = uint(i)
+		if s[i] == "0" && exposeTokens[i].empty {
+			if !inside {
+				inside = true
+				start = uint(i)
+			}
+		} else {
+			if inside {
+				inside = false
+				if start+1 < uint(i) {
+					ret = append(ret, zeros{start, uint(i)})
+				}
+			}
+		}
+	}
+	if inside && start != maxi {
+		ret = append(ret, zeros{start, maxi + 1})
+	}
+	return ret
+}
+
 func removeZeroTokens(s []string) []string {
 	z := findBestZeros(findZerosInTokens(s))
+	if z.start == 0 && z.stop == 0 {
+		return s
+	}
+	if z.start == 0 {
+		z.start = 1
+		s[0] = ""
+	}
+	if z.stop == 8 {
+		z.stop = 7
+		s[7] = ""
+	}
+	newLen := 8 - z.count() + 1
+	newS := make([]string, newLen)
+	copy(newS[:z.start], s[:z.start])
+	copy(newS[z.start+1:], s[z.stop:])
+	return newS
+}
+
+func removeZeroTokensExpose(s []string, exposeTokens []exposeInToken) []string {
+	z := findBestZeros(findZerosInTokensExpose(s, exposeTokens))
 	if z.start == 0 && z.stop == 0 {
 		return s
 	}
@@ -401,6 +530,52 @@ func (i6 *ipv6addr) StringTokens(leadingZeros bool) []string {
 	return s
 }
 
+func tokenizeExpose(exposeHexStart, exposeHexEnd uint) []exposeInToken {
+	s := make([]exposeInToken, 8)
+	for i := range s {
+		hS := uint(i) * 4
+		hE := uint(i)*4 + 3
+		s[i] = exposeInToken{}
+		if exposeHexEnd < hS || exposeHexStart > hE {
+			s[i].empty = true
+		} else {
+			s[i].empty = false
+			if exposeHexStart < hS {
+				s[i].contLeft = true
+			} else {
+				s[i].contLeft = false
+				s[i].start = exposeHexStart
+			}
+			if hE < exposeHexEnd {
+				s[i].contRight = true
+			} else {
+				s[i].contRight = false
+				s[i].stop = exposeHexEnd
+			}
+		}
+	}
+	return s
+}
+
+//BitToHexNum ...
+// 0 ... 3 = hex 0
+// 4 ... 7 = hex 1 .....
+// total bits = 128, total hex = 4*8 = 32...
+// 124 ... 127 = hex 31
+func BitToHexNum(bit uint) uint {
+	return bit / 4
+}
+
+//bits are counted as mask, end bit is +1, works as array index
+//for example start = 10, end = 11 means that only 10 bit is exposed
+func (i6 *ipv6addr) StringTokensExpose(exposeTokens []exposeInToken) []string {
+	s := i6.StringTokens(false)
+	for i := range s {
+		s[i] = i6.asHexTokenExpose(7-i, *(exposeTokens[i].localExpose(i)))
+	}
+	return s
+}
+
 func (i6 ipv6addr) String() string {
 	s := i6.StringTokens(false)
 	s = removeZeroTokens(s)
@@ -409,6 +584,17 @@ func (i6 ipv6addr) String() string {
 
 func (i6 *ipv6addr) LongString() string {
 	s := i6.StringTokens(true)
+	return strings.Join(s, ":")
+}
+
+func (i6 *ipv6addr) ExposeString(exposeBitStart, exposeBitEnd uint) string {
+	es := BitToHexNum(exposeBitStart)
+	ee := BitToHexNum(exposeBitEnd)
+
+	te := tokenizeExpose(es, ee)
+
+	s := i6.StringTokensExpose(te)
+	s = removeZeroTokensExpose(s, te)
 	return strings.Join(s, ":")
 }
 
@@ -698,6 +884,22 @@ func main() {
 			} else {
 				fmt.Println("No next.")
 			}
+		}
+	}
+	test4, _ := makeIPv6AddrFromString("0:a::")
+	for i := 0; i < 128; i += 6 {
+		for j := i; j < 128; j += 4 {
+			hi := BitToHexNum(uint(i))
+			hj := BitToHexNum(uint(j))
+			fmt.Printf("i: %v, j: %#v, hi: %v, hj: %v -> ", i, j, hi, hj)
+			te := tokenizeExpose(hi, hj)
+			fmt.Printf("%+v\n", te)
+			fmt.Println(test4.ExposeString(uint(i), uint(j)))
+			// for i := range te {
+			// 	te[i] = *(te[i].localExpose(i))
+			// }
+			// fmt.Printf("i: %v, j: %#v, hi: %v, hj: %v -> ", i, j, hi, hj)
+			// fmt.Printf("%+v\n", te)
 		}
 	}
 }
