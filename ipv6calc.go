@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"math/bits"
 	"strconv"
 	"strings"
 )
@@ -23,8 +24,8 @@ type ipv6prefix struct {
 	addrMask *ipv6addr
 }
 
-const leftExposeChar = "<"
-const rightExposeChar = ">"
+const leftExposeChar = " "
+const rightExposeChar = " "
 
 func checkHexChar(b byte) bool {
 	if b >= '0' && b <= '9' {
@@ -343,6 +344,41 @@ func (i6 *ipv6addr) Or(i *ipv6addr) *ipv6addr {
 
 func (i6 *ipv6addr) Neg() *ipv6addr {
 	return &ipv6addr{^i6.high, ^i6.low}
+}
+
+func (i6 *ipv6addr) Xor(i *ipv6addr) *ipv6addr {
+	nh := i6.high ^ i.high
+	nl := i6.low ^ i.low
+	return &ipv6addr{nh, nl}
+}
+
+func (i6 *ipv6addr) CummulativeXor(i1, i2 *ipv6addr) *ipv6addr {
+	return i6.Or(i1.Xor(i2))
+}
+
+func (i6 *ipv6addr) BitsRange() (start, stop uint) {
+	highBits := bits.OnesCount64(i6.high)
+	lowBits := bits.OnesCount64(i6.low)
+
+	if highBits > 0 {
+		start = uint(bits.LeadingZeros64(i6.high))
+	} else {
+		if lowBits > 0 {
+			start = uint(bits.LeadingZeros64(i6.low) + 64)
+		} else {
+			start = 0
+		}
+	}
+	if lowBits > 0 {
+		stop = uint(bits.TrailingZeros64(i6.low))
+	} else {
+		if highBits > 0 {
+			stop = uint(bits.TrailingZeros64(i6.high) + 64)
+		} else {
+			stop = 0
+		}
+	}
+	return start, stop
 }
 
 func (i6 *ipv6addr) Inc() *ipv6addr {
@@ -903,8 +939,8 @@ func main() {
 			hi := BitToHexNum(uint(i))
 			hj := BitToHexNum(uint(j))
 			fmt.Printf("i: %v, j: %#v, hi: %v, hj: %v -> ", i, j, hi, hj)
-			te := tokenizeExpose(hi, hj)
-			fmt.Printf("%+v\n", te)
+			//te := tokenizeExpose(hi, hj)
+			//fmt.Printf("%+v\n", te)
 			fmt.Println(test4.ExposeString(uint(i), uint(j)))
 			// for i := range te {
 			// 	te[i] = *(te[i].localExpose(i))
@@ -913,4 +949,21 @@ func main() {
 			// fmt.Printf("%+v\n", te)
 		}
 	}
+	test5, _ := makeIPv6PrefixFromString("33:55:33::/64")
+	cum := &ipv6addr{}
+	fmt.Printf("Starting from: %v\n", test5)
+	addrs := make([]*ipv6prefix, 0, 21)
+	for i := 0; i < 20; i++ {
+		test5n := test5.nextPrefix()
+		cum = cum.CummulativeXor(&test5.addr, &test5n.addr)
+		test5 = test5n
+		addrs = append(addrs, test5)
+	}
+	fmt.Printf("Cummulative XOR: %v\n", cum)
+	start, end := cum.BitsRange()
+	fmt.Printf("Bits from CumXOR: %v - %v\n", start, end)
+	for i, v := range addrs {
+		fmt.Printf("Next %v: %v/64\n", i, v.addr.ExposeString(start, end-1))
+	}
+
 }
