@@ -370,10 +370,10 @@ func (i6 *ipv6addr) BitsRange() (start, stop uint) {
 		}
 	}
 	if lowBits > 0 {
-		stop = uint(bits.TrailingZeros64(i6.low))
+		stop = uint(127 - bits.TrailingZeros64(i6.low))
 	} else {
 		if highBits > 0 {
-			stop = uint(bits.TrailingZeros64(i6.high) + 64)
+			stop = uint(63 - bits.TrailingZeros64(i6.high))
 		} else {
 			stop = 0
 		}
@@ -825,6 +825,10 @@ func (p *ipv6prefix) SubnetString() string {
 	return fmt.Sprintf("%v/%v", p.firstAddressFromSubnet(), p.mask)
 }
 
+func (p *ipv6prefix) ExposeString(exposeBitStart, exposeBitEnd uint) string {
+	return fmt.Sprintf("%v/%v", p.addr.ExposeString(exposeBitStart, exposeBitEnd), p.mask)
+}
+
 func main() {
 	t := cleanToken()
 
@@ -934,8 +938,8 @@ func main() {
 		}
 	}
 	test4, _ := makeIPv6AddrFromString("0:a::")
-	for i := 0; i < 128; i += 6 {
-		for j := i; j < 128; j += 4 {
+	for i := 58; i < 68; i += 1 {
+		for j := i; j < 68; j += 1 {
 			hi := BitToHexNum(uint(i))
 			hj := BitToHexNum(uint(j))
 			fmt.Printf("i: %v, j: %#v, hi: %v, hj: %v -> ", i, j, hi, hj)
@@ -949,7 +953,7 @@ func main() {
 			// fmt.Printf("%+v\n", te)
 		}
 	}
-	test5, _ := makeIPv6PrefixFromString("33:55:33::/64")
+	test5, _ := makeIPv6PrefixFromString("0:1:1:1::/64")
 	cum := &ipv6addr{}
 	fmt.Printf("Starting from: %v\n", test5)
 	addrs := make([]*ipv6prefix, 0, 21)
@@ -961,9 +965,14 @@ func main() {
 	}
 	fmt.Printf("Cummulative XOR: %v\n", cum)
 	start, end := cum.BitsRange()
-	fmt.Printf("Bits from CumXOR: %v - %v\n", start, end)
+	fmt.Printf("Bits from CumulativeXOR: %v - %v\n", start, end)
 	for i, v := range addrs {
-		fmt.Printf("Next %v: %v/64\n", i, v.addr.ExposeString(start, end-1))
+		fmt.Printf("Next %02v: %v", i, v.ExposeString(start, end))
+		if i > 0 {
+			fmt.Printf(" bitdiff: %v\n", (addrs[i-1].addr.Xor(&v.addr)).LongString())
+		} else {
+			fmt.Printf("\n")
+		}
 	}
 
 }
