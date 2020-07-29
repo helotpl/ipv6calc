@@ -24,8 +24,29 @@ type ipv6prefix struct {
 	addrMask *ipv6addr
 }
 
-const leftExposeChar = " "
-const rightExposeChar = " "
+type exposeChar struct {
+	before   bool //if not before than after
+	position uint
+	char     rune
+}
+
+type hexPrintConfig struct {
+	upcase          bool
+	leasingZeros    bool
+	exposeStartChar *rune
+	exposeEndChar   *rune
+}
+
+func makeDefaultHexPrintConfig() hexPrintConfig {
+	l := leftExposeRune
+	r := rightExposeRune
+	return hexPrintConfig{false, false, &l, &r}
+}
+
+const leftExposeChar = '<'
+const rightExposeChar = '>'
+const leftExposeRune = rune(leftExposeChar)
+const rightExposeRune = rune(rightExposeChar)
 
 func checkHexChar(b byte) bool {
 	if b >= '0' && b <= '9' {
@@ -281,7 +302,7 @@ func toHexTokenExpose(num uint64, token int, localExp exposeInToken) string {
 			space := localExp.start
 			//if !(token == 0 && space == 0) {
 			space += uint(len(ret)) - 4
-			ret = ret[:space] + leftExposeChar + ret[space:]
+			ret = ret[:space] + string(leftExposeChar) + ret[space:]
 			//add++
 			//}
 		}
@@ -289,9 +310,35 @@ func toHexTokenExpose(num uint64, token int, localExp exposeInToken) string {
 			space := localExp.stop
 			//if !(token == 7 && space == 4) {
 			space += uint(len(ret)) - 4 + 1
-			ret = ret[:space] + rightExposeChar + ret[space:]
+			ret = ret[:space] + string(rightExposeChar) + ret[space:]
 			//}
 		}
+	}
+	return ret
+}
+
+func toHexTokenMultiExpose(num uint64, token int, localExposes []exposeChar) string {
+	num = (num >> (token * 16)) & 0xFFFF
+	minZeros := uint(0)
+	for i := range localExposes {
+		nminZeros := 4 - localExposes[i].position
+		if nminZeros > minZeros {
+			minZeros = nminZeros
+		}
+	}
+	var format string
+	if minZeros > 0 {
+		format = fmt.Sprintf("%%0%vx", minZeros)
+	} else {
+		format = "%v"
+	}
+	ret := fmt.Sprintf(format, num)
+	for _, v := range localExposes {
+		pos := uint(len(ret)) - 4 + v.position
+		if v.before == false {
+			pos++
+		}
+		ret = ret[:pos] + string(v.char) + ret[pos:]
 	}
 	return ret
 }
@@ -604,6 +651,15 @@ func tokenizeExpose(exposeHexStart, exposeHexEnd uint) []exposeInToken {
 	return s
 }
 
+func tokenizeMultiExpose(e []exposeChar) [][]exposeChar {
+	r := make([][]exposeChar, 8)
+	for i := range e {
+		toknum := e[i].position / 4
+		r[toknum] = append(r[toknum], e[i])
+	}
+	return r
+}
+
 //BitToHexNum ...
 // 0 ... 3 = hex 0
 // 4 ... 7 = hex 1 .....
@@ -642,6 +698,12 @@ func (i6 *ipv6addr) ExposeString(exposeBitStart, exposeBitEnd uint) string {
 
 	s := i6.StringTokensExpose(te)
 	s = removeZeroTokensExpose(s, te)
+	return strings.Join(s, ":")
+}
+
+func (i6 *ipv6addr) MultiExposeString(exposes []exposeChar) string {
+	s := i6.StringTokens(false)
+	s = removeZeroTokens(s)
 	return strings.Join(s, ":")
 }
 
@@ -975,4 +1037,6 @@ func main() {
 		}
 	}
 
+	e1 := []exposeChar{exposeChar{true, 2, '_'}, exposeChar{false, 1, '^'}}
+	fmt.Println(toHexTokenMultiExpose(uint64(1024), 0, e1))
 }
