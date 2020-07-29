@@ -33,14 +33,12 @@ type exposeChar struct {
 type hexPrintConfig struct {
 	upcase          bool
 	leasingZeros    bool
-	exposeStartChar *rune
-	exposeEndChar   *rune
+	exposeStartChar rune
+	exposeEndChar   rune
 }
 
 func makeDefaultHexPrintConfig() hexPrintConfig {
-	l := leftExposeRune
-	r := rightExposeRune
-	return hexPrintConfig{false, false, &l, &r}
+	return hexPrintConfig{false, false, leftExposeRune, rightExposeRune}
 }
 
 const leftExposeChar = '<'
